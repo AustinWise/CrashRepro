@@ -23,6 +23,9 @@ namespace ConsoleApp2
 
         static int Main(string[] args)
         {
+            Console.WriteLine("Starting crash repro.");
+            Console.Out.Flush();
+
             MyFunc<LoginViewModel, string> a = GetEmail;
             try
             {
@@ -40,9 +43,9 @@ namespace ConsoleApp2
             {
             }
 
-            Console.WriteLine("Still did not crash.");
+            Console.WriteLine("Did not crash.");
             Console.Out.Flush();
-            return 42;
+            return 0;
         }
     }
 }
