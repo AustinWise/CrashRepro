@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.CompilerServices;
+using System.Diagnostics;
 
 namespace ConsoleApp2
 {
@@ -23,6 +24,9 @@ namespace ConsoleApp2
 
         static int Main(string[] args)
         {
+            Console.WriteLine($"My pid is: {Process.GetCurrentProcess().Id}, awaiting your command to jumping into signal-induced death.");
+            Console.ReadLine();
+
             Console.WriteLine("Starting crash repro.");
             Console.Out.Flush();
 
