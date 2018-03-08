@@ -226,10 +226,6 @@ typedef unsigned __int8 uint8_t;
 
 #ifndef _MSC_VER
 
-#if _WIN64
-typedef long double LONG_DOUBLE;
-#endif
-
 #endif // _MSC_VER
 #endif // !PAL_STDCPP_COMPAT
 
@@ -671,19 +667,6 @@ typedef HANDLE HRSRC;
 
 typedef LONG HRESULT;
 typedef LONG NTSTATUS;
-
-typedef union _LARGE_INTEGER {
-    struct {
-#if BIGENDIAN
-        LONG HighPart;
-        DWORD LowPart;
-#else
-        DWORD LowPart;
-        LONG HighPart;
-#endif
-    } u;
-    LONGLONG QuadPart;
-} LARGE_INTEGER, *PLARGE_INTEGER;
 
 #ifndef GUID_DEFINED
 typedef struct _GUID {
