@@ -10,17 +10,16 @@
 #include "pal.h"
 #include "context.h"
 
-
 #define MAPPED_MEMORY_SIZE 4096
 
 static int *mapped_memory1;
 static int *mapped_memory2;
 static void *alt_signal_stack;
 
-DWORD64 Rsp1;
-DWORD64 Rsp2;
+static DWORD64 Rsp1;
+static DWORD64 Rsp2;
 
-static void change_protection_to_readable(void* addr)
+static void change_protection_to_readable(void *addr)
 {
 	int rc;
 
@@ -43,18 +42,18 @@ static void segv_handler(int code, siginfo_t *siginfo, void *context)
 	void *addr = siginfo->si_addr;
 	change_protection_to_readable(addr);
 
-    /* Unmask signal so we can receive it again */
-    sigset_t signal_set;
-    sigemptyset(&signal_set);
-    sigaddset(&signal_set, code);
-    int sigmaskRet = sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
-    if (sigmaskRet != 0)
-    {
+	/* Unmask signal so we can receive it again */
+	sigset_t signal_set;
+	sigemptyset(&signal_set);
+	sigaddset(&signal_set, code);
+	int sigmaskRet = sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
+	if (sigmaskRet != 0)
+	{
 		abort();
-    }
+	}
 
 	//resume execution
-	ucontext_t* fault_context = (ucontext_t*)context;
+	ucontext_t *fault_context = (ucontext_t *)context;
 	CONTEXT ctx;
 	//capture first to get any missing registers
 	RtlCaptureContext(&ctx);
@@ -79,11 +78,11 @@ static void doRead(int id, int *addr)
 
 int main(int argc, char **argv)
 {
-	(void) argc;
-	(void) argv;
+	(void)argc;
+	(void)argv;
 
 	printf("my pid, push enter to start: %d\n", getpid());
-	(void) getchar();
+	(void)getchar();
 
 	int rc;
 
@@ -119,7 +118,7 @@ int main(int argc, char **argv)
 	}
 
 	struct sigaction myNewAction;
-    myNewAction.sa_handler = NULL;
+	myNewAction.sa_handler = NULL;
 	myNewAction.sa_sigaction = segv_handler;
 	myNewAction.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
 	rc = sigaction(SIGSEGV, &myNewAction, NULL);
