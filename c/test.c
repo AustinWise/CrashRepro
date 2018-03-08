@@ -5,12 +5,20 @@
 #include <unistd.h>
 #include <ucontext.h>
 #include <sys/mman.h>
+#include <signal.h>
+
+#include "pal.h"
+#include "context.h"
+
 
 #define MAPPED_MEMORY_SIZE 4096
 
 static int *mapped_memory1;
 static int *mapped_memory2;
 static void *alt_signal_stack;
+
+DWORD64 Rsp1;
+DWORD64 Rsp2;
 
 static void change_protection_to_readable(void* addr)
 {
@@ -31,11 +39,37 @@ static void change_protection_to_readable(void* addr)
 
 static void segv_handler(int code, siginfo_t *siginfo, void *context)
 {
-	//ucontext_t* fault_context = (ucontext_t*)context;
-	//int* rax = (int*)fault_context->uc_mcontext.gregs[REG_RAX];
+	//fix protection
 	void *addr = siginfo->si_addr;
 	change_protection_to_readable(addr);
-	//setcontext(fault_context);
+
+    /* Unmask signal so we can receive it again */
+    sigset_t signal_set;
+    sigemptyset(&signal_set);
+    sigaddset(&signal_set, code);
+    int sigmaskRet = sigprocmask(SIG_UNBLOCK, &signal_set, NULL);
+    if (sigmaskRet != 0)
+    {
+		abort();
+    }
+
+	//resume execution
+	ucontext_t* fault_context = (ucontext_t*)context;
+	CONTEXT ctx;
+	//capture first to get any missing registers
+	RtlCaptureContext(&ctx);
+
+	if (addr == mapped_memory1)
+	{
+		Rsp1 = ctx.Rsp;
+	}
+	else if (addr == mapped_memory2)
+	{
+		Rsp2 = ctx.Rsp;
+	}
+
+	CONTEXTFromNativeContext(fault_context, &ctx, CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT | CONTEXT_XSTATE);
+	RtlRestoreContext(&ctx);
 }
 
 static void doRead(int id, int *addr)
@@ -45,6 +79,9 @@ static void doRead(int id, int *addr)
 
 int main(int argc, char **argv)
 {
+	(void) argc;
+	(void) argv;
+
 	int rc;
 
 	mapped_memory1 = mmap(NULL, MAPPED_MEMORY_SIZE, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -89,10 +126,24 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	CONTEXT ctx;
+	RtlCaptureContext(&ctx);
+	printf("current stack: 0x%lx alt sig stack: %p\n", ctx.Rsp, alt_signal_stack);
+
 	doRead(1, mapped_memory1);
 	doRead(2, mapped_memory2);
 
-	puts("I am still alive!?");
+	printf("rsp1: 0x%lx, rsp2: 0x%lx\n", Rsp1, Rsp2);
 
-	return EXIT_SUCCESS;
+	DWORD64 diff = Rsp2 - (DWORD64)alt_signal_stack;
+	if (diff > 0x4000)
+	{
+		puts("Test failed: the second time the signal handler was called on the wrong stack");
+		return EXIT_FAILURE;
+	}
+	else
+	{
+		puts("The program behaved as expected.");
+		return EXIT_FAILURE;
+	}
 }

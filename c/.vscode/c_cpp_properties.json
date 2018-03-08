@@ -14,7 +14,12 @@
                 "${workspaceRoot}"
             ],
             "defines": [
-                "_GNU_SOURCE"
+                "_GNU_SOURCE",
+                "HAVE_UCONTEXT_T",
+                "BIT64",
+                "_AMD64_",
+                "PAL_IMPLEMENTATION",
+                "HAVE_GREGSET_T"
             ],
             "intelliSenseMode": "clang-x64",
             "browse": {
