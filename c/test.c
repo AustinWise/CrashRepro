@@ -82,6 +82,9 @@ int main(int argc, char **argv)
 	(void) argc;
 	(void) argv;
 
+	printf("my pid, push enter to start: %d\n", getpid());
+	(void) getchar();
+
 	int rc;
 
 	mapped_memory1 = mmap(NULL, MAPPED_MEMORY_SIZE, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
