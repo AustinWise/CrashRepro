@@ -6,41 +6,59 @@
 #include <ucontext.h>
 #include <sys/mman.h>
 #include <signal.h>
+#include <stdbool.h>
+#include <errno.h>
 
 #include "pal.h"
 #include "context.h"
 
+#define NUMBER_OF_TRIALS 4
 #define MAPPED_MEMORY_SIZE 4096
 
-static int *mapped_memory1;
-static int *mapped_memory2;
+static int* mapped_memory[NUMBER_OF_TRIALS];
 static void *alt_signal_stack;
 
-static DWORD64 Rsp1;
-static DWORD64 Rsp2;
+static intptr_t observed_rsp[NUMBER_OF_TRIALS];
 
-static void change_protection_to_readable(void *addr)
+static void change_protection_to_readable(void *addr, intptr_t rsp)
 {
 	int rc;
 
-	if (addr != mapped_memory1 && addr != mapped_memory2)
+	bool foundIt = false;
+	for (int i = 0; i < NUMBER_OF_TRIALS; i++)
+	{
+		if (mapped_memory[i] == addr)
+		{
+			observed_rsp[i] = rsp;
+			foundIt = true;
+			break;
+		}
+	}
+
+	if (!foundIt)
 	{
 		//This was not the address we were expecting.
 		abort();
 	}
 
-	rc = mprotect(addr, MAPPED_MEMORY_SIZE, PROT_READ);
+	rc = mprotect(addr, MAPPED_MEMORY_SIZE, PROT_READ | PROT_WRITE);
 	if (rc != 0)
 	{
+		rc = errno;
 		abort();
 	}
 }
 
 static void segv_handler(int code, siginfo_t *siginfo, void *context)
 {
+	//see where we are
+	ucontext_t *fault_context = (ucontext_t *)context;
+	CONTEXT ctx;
+	RtlCaptureContext(&ctx);
+
 	//fix protection
 	void *addr = siginfo->si_addr;
-	change_protection_to_readable(addr);
+	change_protection_to_readable(addr, ctx.Rsp);
 
 	/* Unmask signal so we can receive it again */
 	sigset_t signal_set;
@@ -52,21 +70,18 @@ static void segv_handler(int code, siginfo_t *siginfo, void *context)
 		abort();
 	}
 
-	//resume execution
-	ucontext_t *fault_context = (ucontext_t *)context;
-	CONTEXT ctx;
-	//capture first to get any missing registers
-	RtlCaptureContext(&ctx);
-
-	if (addr == mapped_memory1)
+	if (addr == mapped_memory[0])
 	{
-		Rsp1 = ctx.Rsp;
+		*mapped_memory[1] = 1;
+		return;
 	}
-	else if (addr == mapped_memory2)
+	else if (addr == mapped_memory[1])
 	{
-		Rsp2 = ctx.Rsp;
+		return;
 	}
 
+	//switch back to executing on the regular stack and pretend the signal
+	//never happened -_-
 	CONTEXTFromNativeContext(fault_context, &ctx, CONTEXT_CONTROL | CONTEXT_INTEGER | CONTEXT_FLOATING_POINT | CONTEXT_XSTATE);
 	RtlRestoreContext(&ctx);
 }
@@ -74,6 +89,17 @@ static void segv_handler(int code, siginfo_t *siginfo, void *context)
 static void doRead(int id, int *addr)
 {
 	printf("reading from mapped memory %d: %d\n", id, *addr);
+}
+
+static int* allocate_memory()
+{
+	void* mem = mmap(NULL, MAPPED_MEMORY_SIZE, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+	if (mem == MAP_FAILED)
+	{
+		perror("mmap1");
+		exit(EXIT_FAILURE);
+	}
+	return (int*)mem;
 }
 
 int main(int argc, char **argv)
@@ -86,17 +112,10 @@ int main(int argc, char **argv)
 
 	int rc;
 
-	mapped_memory1 = mmap(NULL, MAPPED_MEMORY_SIZE, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (mapped_memory1 == MAP_FAILED)
+	for (int i = 0; i < NUMBER_OF_TRIALS; i++)
 	{
-		perror("mmap1");
-		return EXIT_FAILURE;
-	}
-	mapped_memory2 = mmap(NULL, MAPPED_MEMORY_SIZE, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (mapped_memory2 == MAP_FAILED)
-	{
-		perror("mmap2");
-		return EXIT_FAILURE;
+		mapped_memory[i] = allocate_memory();
+		observed_rsp[i] = 0;
 	}
 
 	alt_signal_stack = malloc(SIGSTKSZ);
@@ -132,20 +151,15 @@ int main(int argc, char **argv)
 	RtlCaptureContext(&ctx);
 	printf("current stack: 0x%lx alt sig stack: %p\n", ctx.Rsp, alt_signal_stack);
 
-	doRead(1, mapped_memory1);
-	doRead(2, mapped_memory2);
-
-	printf("rsp1: 0x%lx, rsp2: 0x%lx\n", Rsp1, Rsp2);
-
-	DWORD64 diff = Rsp2 - (DWORD64)alt_signal_stack;
-	if (diff > 0x4000)
+	for	(int i = 0; i < NUMBER_OF_TRIALS; i++)
 	{
-		puts("Test failed: the second time the signal handler was called on the wrong stack");
-		return EXIT_FAILURE;
+		doRead(i, mapped_memory[i]);
 	}
-	else
+
+	for	(int i = 0; i < NUMBER_OF_TRIALS; i++)
 	{
-		puts("The program behaved as expected.");
-		return EXIT_FAILURE;
+		printf("rsp %d: 0x%lx\n", i, observed_rsp[i]);
 	}
+	
+	return EXIT_SUCCESS;
 }
