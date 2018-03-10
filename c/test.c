@@ -107,9 +107,6 @@ int main(int argc, char **argv)
 	(void)argc;
 	(void)argv;
 
-	printf("my pid, push enter to start: %d\n", getpid());
-	(void)getchar();
-
 	int rc;
 
 	for (int i = 0; i < NUMBER_OF_TRIALS; i++)
@@ -149,7 +146,7 @@ int main(int argc, char **argv)
 
 	CONTEXT ctx;
 	RtlCaptureContext(&ctx);
-	printf("current stack: 0x%lx alt sig stack: %p\n", ctx.Rsp, alt_signal_stack);
+	printf("main stack: 0x%lx alt sig stack: %p\n", ctx.Rsp, alt_signal_stack);
 
 	for	(int i = 0; i < NUMBER_OF_TRIALS; i++)
 	{
@@ -160,6 +157,38 @@ int main(int argc, char **argv)
 	{
 		printf("rsp %d: 0x%lx\n", i, observed_rsp[i]);
 	}
+
+	//Check that the nested case is different from the non-nest case.
+	if (observed_rsp[0] == observed_rsp[1])
+	{
+		puts("Nested signal RSP matches non-nested signal!?");
+		return EXIT_FAILURE;
+	}
+
+	//Check the rsp the first time we SIGSEGV before pivoting off the signal stack.
+	if (observed_rsp[0] != observed_rsp[2])
+	{
+		puts("rsp[0] and [2] don't match");
+		return EXIT_FAILURE;
+	}
+
+	//Check that the signal rsp is the same after we pivot back to the main stack
+	//and SIGSEGV again.
+	if (observed_rsp[0] != observed_rsp[3])
+	{
+		puts("rsp[0] and rsp[3] don't match");
+	}
+
+	for	(int i = 0; i < NUMBER_OF_TRIALS; i++)
+	{
+		ptrdiff_t diff = observed_rsp[i] - (intptr_t)alt_signal_stack;
+		diff = labs(diff);
+		if (diff > SIGSTKSZ)
+		{
+			printf("rsp[%d] is not in alt_signal_stack\n", i);
+		}
+	}
 	
+	puts("all tests pass");
 	return EXIT_SUCCESS;
 }
