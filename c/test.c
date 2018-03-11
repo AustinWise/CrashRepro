@@ -96,7 +96,7 @@ static int* allocate_memory()
 	void* mem = mmap(NULL, MAPPED_MEMORY_SIZE, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (mem == MAP_FAILED)
 	{
-		perror("mmap1");
+		perror("mmap");
 		exit(EXIT_FAILURE);
 	}
 	return (int*)mem;
@@ -136,7 +136,7 @@ int main(int argc, char **argv)
 	struct sigaction myNewAction;
 	myNewAction.sa_handler = NULL;
 	myNewAction.sa_sigaction = segv_handler;
-	myNewAction.sa_flags = SA_RESTART | SA_SIGINFO | SA_ONSTACK;
+	myNewAction.sa_flags = SA_SIGINFO | SA_ONSTACK;
 	rc = sigaction(SIGSEGV, &myNewAction, NULL);
 	if (rc != 0)
 	{
@@ -155,21 +155,23 @@ int main(int argc, char **argv)
 
 	for	(int i = 0; i < NUMBER_OF_TRIALS; i++)
 	{
-		printf("rsp %d: 0x%lx\n", i, observed_rsp[i]);
+		printf("Observered signal stack rsp %d: 0x%lx\n", i, observed_rsp[i]);
 	}
+
+	rc = EXIT_SUCCESS;
 
 	//Check that the nested case is different from the non-nest case.
 	if (observed_rsp[0] == observed_rsp[1])
 	{
 		puts("Nested signal RSP matches non-nested signal!?");
-		return EXIT_FAILURE;
+		rc = EXIT_FAILURE;
 	}
 
 	//Check the rsp the first time we SIGSEGV before pivoting off the signal stack.
 	if (observed_rsp[0] != observed_rsp[2])
 	{
 		puts("rsp[0] and [2] don't match");
-		return EXIT_FAILURE;
+		rc = EXIT_FAILURE;
 	}
 
 	//Check that the signal rsp is the same after we pivot back to the main stack
@@ -177,6 +179,7 @@ int main(int argc, char **argv)
 	if (observed_rsp[0] != observed_rsp[3])
 	{
 		puts("rsp[0] and rsp[3] don't match");
+		rc = EXIT_FAILURE;
 	}
 
 	for	(int i = 0; i < NUMBER_OF_TRIALS; i++)
@@ -186,9 +189,18 @@ int main(int argc, char **argv)
 		if (diff > SIGSTKSZ)
 		{
 			printf("rsp[%d] is not in alt_signal_stack\n", i);
+			rc = EXIT_FAILURE;
 		}
 	}
+
+	if (rc == EXIT_SUCCESS)
+	{
+		puts("all tests pass");
+	}
+	else
+	{
+		puts("some tests failed");
+	}
 	
-	puts("all tests pass");
-	return EXIT_SUCCESS;
+	return rc;
 }
