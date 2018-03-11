@@ -16,6 +16,16 @@ of illumos-joyent.
 
 # Root Cause
 
+Consider program that uses an alternate stack to handle a signal.Inside this
+signal handler it changes it stack pointer to different location outside of the
+alternate stack. If the signal handler unmasks the signal and triggers the
+signal again before returning from the signal handler, Linux starts executing
+the nested signal handler at the start of the alternate stack.
+LX notices that the signal handler never returned and does not use the alternate
+stack.
+
+# Why .NET Core crashes
+
 When .NET Core runs on Linux, it uses a `SIGSEGV` handler to turn `SIGSEGV`s in
 managed code into `NullReferenceException`s.
 When installing the `SIGSEGV` handler, .NET Core uses `sigaltstack(2)` to define
