@@ -10,6 +10,10 @@ form of a .NET Core console app.
 
 The [c](./c) folder contains a C program that can detect the problem.
 
+A potential fix for this problem is on my
+[my fork](https://github.com/AustinWise/illumos-joyent/tree/austin/FixLinuxSigs)
+of illumos-joyent.
+
 # Root Cause
 
 When .NET Core runs on Linux, it uses a `SIGSEGV` handler to turn `SIGSEGV`s in
